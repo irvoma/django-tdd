@@ -1,0 +1,6 @@
+.venv
+*.sqlite3
+*.log
+__pycache__
+*.pyc
+Pipfile.lock
