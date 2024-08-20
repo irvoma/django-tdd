@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 django = "==4.2.*"
+gunicorn = "==23.0.0"
 
 [dev-packages]
 selenium = "==4.23.1"
