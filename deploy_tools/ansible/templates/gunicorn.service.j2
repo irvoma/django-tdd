@@ -1,0 +1,18 @@
+[Unit]
+Description=Gunicorn server for {{ host }}
+
+[Service]
+Restart=on-failure
+User={{ ssh_user }}
+WorkingDirectory={{ project_root }}
+EnvironmentFile={{ project_root }}/.env
+
+ExecStart={{ project_root }}/.venv/bin/gunicorn \
+    --bind unix:/tmp/{{ host }}.socket \
+    --access-logfile {{ project_root }}/.logs/gunicorn.access.log \
+    --error-logfile {{ project_root }}/.logs/gunicorn.error.log \
+    {{ wsgi_application }}
+
+[Install]
+WantedBy=multi-user.target
+

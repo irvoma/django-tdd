@@ -1,0 +1,118 @@
+---
+
+- name: Repository
+
+  hosts: staging
+  become: false
+  become_user: django
+
+  vars:
+    host: "{{ inventory_hostname }}"
+    repo_url: "https://github.com/irvoma/django-tdd.git"
+    project_dir: "/home/django/sites/{{ inventory_hostname }}"
+    pyenv_bin: "/home/django/.pyenv/bin/pyenv"
+    python_version: "3.12"
+    django_settings_module: "superlists.settings"
+
+  tasks:
+#    The task works fine, but pyenv takes too long to complete the process.
+#    - name: Check pyenv version
+#      ansible.builtin.shell:
+#        cmd: "{{ pyenv_bin }} --version"
+#      register: pyenv_version
+#      args:
+#        executable: /bin/bash
+#
+#    - name: Display pyenv version
+#      ansible.builtin.debug:
+#        msg: "Pyenv version installed: {{ pyenv_version.stdout }}"
+#
+#    - name: Ensure right python version is installed using pyenv
+#      ansible.builtin.shell:
+#        cmd: "{{ pyenv_bin }} install -s {{ python_version }}"
+
+    - name: Clone the repository if not already present
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: main
+        update: false
+        force: false
+      register: git_clone
+
+    - name: Create virtual environment
+      ansible.builtin.shell: |
+        mkdir .venv \
+        && export WORKON_HOME={{ project_dir }}/.venv \
+        && pipenv install
+      args:
+        executable: /bin/bash
+        chdir: "{{ project_dir }}"
+      when: git_clone.changed
+
+    - name: Check if .env file exists
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/.env"
+      register: env_file
+
+    - name: Create .env file if it does not exist
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/.env"
+        content: |
+          DJANGO_DEBUG_FALSE=y
+          SITENAME="{{ inventory_hostname }}"
+      when: not env_file.stat.exists
+
+    - name: Generate a django secret key value
+      ansible.builtin.command: >
+        pipenv run python -c
+        "from django.core.management.utils import get_random_secret_key;
+        print(get_random_secret_key())"
+      args:
+        chdir: "{{ project_dir }}"
+      register: django_secret_key
+      when: not env_file.stat.exists
+
+    - name: Add DJANGO_SECRET_KEY to .env file
+      ansible.builtin.lineinfile:
+        path: "{{ project_dir }}/.env"
+        line: "DJANGO_SECRET_KEY={{ django_secret_key.stdout }}"
+      when: not env_file.stat.exists
+
+    - name: Checkout the latest commit
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: main
+        force: true
+      register: latest_commit
+
+    - name: Run Django management commands
+      ansible.builtin.shell: |
+        export DJANGO_SETTINGS_MODULE={{ django_settings_module }} \
+        && pipenv run python manage.py makemigrations \
+        && pipenv run python manage.py migrate \
+        && pipenv run python manage.py collectstatic --no-input
+      args:
+        executable: /bin/bash
+        chdir: "{{ project_dir }}"
+      notify:
+        - restart gunicorn
+        - restart nginx
+      when: latest_commit.changed
+
+  handlers:
+    - name: restart nginx
+      ansible.builtin.systemd_service:
+        name: nginx.service
+        state: restarted
+      become: true
+      become_user: root
+
+    - name: restart gunicorn
+      ansible.builtin.systemd_service:
+        name: "gunicorn-{{ host }}.service"
+        enabled: true
+        state: restarted
+      become: true
+      become_user: root

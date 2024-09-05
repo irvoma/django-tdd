@@ -1,0 +1,63 @@
+---
+
+- name: Deploy nginx and gunicorn
+
+  hosts: staging
+  become: true
+
+  vars:
+    host: "{{ inventory_hostname }}"
+    ssh_user: "django"
+    wsgi_application: "superlists.wsgi:application"
+    project_root: "/home/django/sites/{{ inventory_hostname }}"
+
+  tasks:
+    - name: Allow long hostnames in nginx
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: ' (\s+)#? ?server_names_hash_bucket_size'
+        backrefs: true
+        line: '\1 server_names_hash_bucket_size 64;'
+
+    - name: Change the Nginx user in the config file
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        backrefs: true
+        regexp: '^user\s+.*;'
+        line: 'user {{ ssh_user }};'
+
+    - name: Add nginx config to sites-available
+      ansible.builtin.template:
+        src: ./templates/nginx.conf.j2
+        dest: "/etc/nginx/sites-available/{{ host }}.conf"
+      notify:
+        - restart nginx
+
+    - name: Add symlink in nginx sites-enabled
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ host }}.conf"
+        dest: "/etc/nginx/sites-enabled/{{ host }}.conf"
+        state: link
+      notify:
+        - restart nginx
+
+    - name: Write gunicorn service script
+      ansible.builtin.template:
+        src: ./templates/gunicorn.service.j2
+        dest: "/etc/systemd/system/gunicorn-{{ host }}.service"
+      notify:
+        - restart gunicorn
+
+  handlers:
+    - name: restart nginx
+      ansible.builtin.systemd_service:
+        name: nginx.service
+        state: restarted
+
+    - name: restart gunicorn
+      ansible.builtin.systemd_service:
+        name: "gunicorn-{{ host }}.service"
+        daemon_reload: true
+        enabled: true
+        state: restarted
+

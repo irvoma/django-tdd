@@ -1,0 +1,7 @@
+live:
+  hosts:
+    superlists.iorv.xyz:
+
+staging:
+  hosts:
+    superlists-staging.iorv.xyz:

@@ -1,0 +1,123 @@
+---
+
+- name: System dependencies
+  hosts: staging
+  become: true
+  vars:
+    created_username: django
+  tasks:
+    - name: Install aptitude
+      ansible.builtin.apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Setup passwordless sudo
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: "^%sudo"
+        line: "%sudo ALL=(ALL) NOPASSWD: ALL"
+        validate: "/usr/sbin/visudo -cf %s"
+
+    - name: Create a new regular user with sudo privileges
+      ansible.builtin.user:
+        name: "{{ created_username }}"
+        state: present
+        groups: sudo
+        append: true
+        create_home: true
+
+    - name: Set authorized key for remote user
+      ansible.posix.authorized_key:
+        user: "{{ created_username }}"
+        state: present
+        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+
+    - name: Disable password authentication for root
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        state: present
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin prohibit-password"
+
+    - name: update apt and install required system packages
+      ansible.builtin.apt:
+        pkg:
+          - acl # solves the error: Failed to set permissions on the temporary files Ansible needs to create when becoming an unprivileged user
+          - curl
+          - vim
+          - git
+          - ufw
+          - nginx
+          - pipenv
+          # pyenv build dependencies
+          - build-essential
+          - libssl-dev
+          - zlib1g-dev
+          - libbz2-dev
+          - libreadline-dev
+          - libsqlite3-dev
+          - libncursesw5-dev
+          - xz-utils
+          - tk-dev
+          - libxml2-dev
+          - libxmlsec1-dev
+          - libffi-dev
+          - liblzma-dev
+        state: latest
+        update_cache: true
+
+    - name: UFW allow ssh connections
+      community.general.ufw:
+        rule: allow
+        name: OpenSSH
+
+    - name: UFW enable and deny by default
+      community.general.ufw:
+        state: enabled
+        default: deny
+
+    - name: UFW allow http traffic
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+
+    - name: UFW allow https traffic
+      community.general.ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+
+    - name: Download pyenv installer
+      ansible.builtin.get_url:
+        url: https://pyenv.run
+        dest: /tmp/pyenv_installer.sh
+      become: true
+      become_user: "{{ created_username }}"
+
+    - name: Check Pyenv isn't installed yet
+      ansible.builtin.stat:
+        path: "/home/{{ created_username }}/.pyenv"
+      register: pyenv_dir
+
+    - name: Run pyenv installer
+      ansible.builtin.command: sh /tmp/pyenv_installer.sh
+      register: pyenv_result
+      failed_when: "'FAILED' in pyenv_result.stderr"
+      become: true
+      become_user: "{{ created_username }}"
+      when: not pyenv_dir.stat.exists
+
+    - name: Set up Pyenv for shell availability
+      ansible.builtin.blockinfile:
+        path: ~/.bashrc
+        append_newline: true
+        prepend_newline: true
+        block: |
+          export PYENV_ROOT="$HOME/.pyenv"
+          command -v pyenv > /dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+      become: true
+      become_user: "{{ created_username }}"
