@@ -19,7 +19,7 @@ class HomePageTest(TestCase):
         self.assertEqual(Item.objects.count(), 0)
 
 
-class ListViewTest(TestCase):
+class NewListTest(TestCase):
     def test_uses_list_template(self):
         list_ = List.objects.create()
         response = self.client.get(f'/lists/{list_.id}/')
@@ -91,3 +91,5 @@ class ListViewTest(TestCase):
         self.assertTemplateUsed(response, 'lists/list.html')
         expected_error = escape("You can't have an empty list item")
         self.assertContains(response, expected_error)
+
+
