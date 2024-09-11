@@ -33,14 +33,17 @@ class ExistingListItemForm(ItemForm):
         super().__init__(*args, **kwargs)
         self.instance.list = for_list
 
-    def validate_constraints(self):
+    def validate_unique(self):
         """ The book suggests to use validate_unique function, but unique together is
             defined using constraints Meta class option, and the defined constraints are
-            validated through the validate_constraints function
+            validated through the validate_constraints function in the model
             Further info at https://docs.djangoproject.com/en/4.2/ref/models/instances/#django.db.models.Model.validate_unique
         """
-        print('validating constraints')
+        # NOTE: the unique together constraint is defined using the constraints Model Meta option,
+        #  since Django recommends to use it instead of the unique_together option, but this method
+        #  is not called elsewhere in the code of the form. By now I cannot currently find it.
         try:
+            self.instance.validate_unique()
             self.instance.validate_constraints()
         except ValidationError as e:
             e.error_dict = {'text': [DUPLICATE_ITEM_ERROR]}
