@@ -71,14 +71,6 @@ class ListViewTest(TestCase):
 
         self.assertRedirects(response, f'/lists/{correct_list.id}/')
 
-    # def test_validation_errors_end_up_on_lists_page(self):
-    #     """ Test the addition of items to existing lists to be subject to our model validation rules """
-    #     list_ = List.objects.create()
-    #     response = self.client.post(f'/lists/{list_.id}/', data={'text': ''})
-    #     self.assertEqual(response.status_code, 200)
-    #     self.assertTemplateUsed(response, 'lists/list.html')
-    #     expected_error = escape("You can't have an empty list item")
-    #     self.assertContains(response, expected_error)
     def post_invalid_input(self):
         list_ = List.objects.create()
         return self.client.post(f'/lists/{list_.id}/', data={'text': ''})
