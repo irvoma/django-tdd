@@ -33,6 +33,13 @@ class ExistingListItemForm(ItemForm):
         super().__init__(*args, **kwargs)
         self.instance.list = for_list
 
+    def save(self):
+        """ call the original method (the parent's parent save method """
+        # NOTE: Since both forms to call the save parent's parent method works, the author
+        #  prefers to use the second (the uncommented one), since he likes it the most.
+        # return super(ItemForm, self).save()
+        return forms.models.ModelForm.save(self)
+
     def validate_unique(self):
         """ The book suggests to use validate_unique function, but unique together is
             defined using constraints Meta class option, and the defined constraints are
